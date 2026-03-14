@@ -10,18 +10,25 @@ Static files for the ACE dashboard. Symlink them into the directory your UI serv
 - (optional) `ace_dashboard.nginx.conf` sample
 
 
+How to use:
+
+sudo apt-get update
+
+sudo apt-get install -y git
+
 cd ~
 
-git clone -b main https://github.com/ducati1198/AcePro-MMU-Dashboardd
+git clone -b main https://github.com/ducati1198/AcePro-MMU-Dashboard
 
-source ~/klippy-env/bin/activate
+cd ~/acepro _dashboard
 
-- Mainsail: ln -s ~/ace_dashboard/web/ace.* ~/mainsail/
-- Fluidd: ln -s ~/ace_dashboard/web/ace.* ~/fluidd/
+Make it executable:
+chmod +x install.sh
 
-Moonraker ace_status.py:
+Run it:
+./install.sh
 
-ln -s ~/ace_dashboard/moonraker/ace_status.py ~/moonraker/moonraker/components/
+Answer the interactive prompts to choose which components to install and where.
 
 Open `http://<host>/ace.html` after linking. Adjust `ace-dashboard-config.js` if you need a fixed API host.
 
