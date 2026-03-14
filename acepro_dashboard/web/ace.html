@@ -35,7 +35,7 @@
         </div>
 
         <div class="page-wrapper">
-            <!-- Instance Overview Tiles -->
+            <!-- Instance Overview Tiles (dots removed) -->
             <div class="instance-overview" v-if="instancesPanels.length > 0">
                 <div 
                     v-for="inst in instancesPanels" 
@@ -46,7 +46,7 @@
                 >
                     <div class="tile-header">
                         <span class="instance-badge">{{ t('header.instanceLabel', { index: inst.index }) }}</span>
-                        <span class="connection-dot" :class="getInstanceConnectionClass(inst.index)" :title="getInstanceConnectionTooltip(inst.index)"></span>
+                        <!-- Connection dot removed -->
                     </div>
                     <div class="slot-dots">
                         <div 

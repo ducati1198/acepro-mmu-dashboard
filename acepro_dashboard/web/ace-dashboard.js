@@ -401,9 +401,9 @@ createApp({
         this.updateDocumentTitle();
         
         const refreshInterval = ACE_DASHBOARD_CONFIG?.autoRefreshInterval || 5000;
-        setInterval(() => {
+        setInterval(async () => {
             if (this.wsConnected) {
-                this.loadStatus();
+                await this.loadStatus();
                 this.loadConnectionStatus();
             }
         }, refreshInterval);
@@ -436,6 +436,9 @@ createApp({
         // Mobile detection resize listener
         window.addEventListener('resize', this.checkMobile);
         this.checkMobile();
+
+        // Also update container dimensions on window resize
+        window.addEventListener('resize', this.updateContainerHeight);
     },
     
     beforeUnmount() {
@@ -446,6 +449,7 @@ createApp({
         document.removeEventListener('mousemove', this.onDragMove);
         document.removeEventListener('mouseup', this.onDragEnd);
         window.removeEventListener('resize', this.checkMobile);
+        window.removeEventListener('resize', this.updateContainerHeight);
     },
     
     methods: {
@@ -762,21 +766,6 @@ createApp({
                     const slotsArr = Array.isArray(item.slots) ? item.slots : [];
                     const prevPanel = prevPanels.find(p => p.index === item.index);
                     
-                    // Get connection state for this instance
-                    let connectionState = 'unknown';
-                    const connDetail = this.connectionDetails.find(d => d.instance === item.index);
-                    if (connDetail) {
-                        if (!connDetail.connected) {
-                            connectionState = 'disconnected';
-                        } else if (connDetail.stable) {
-                            connectionState = 'stable';
-                        } else {
-                            connectionState = 'unstable';
-                        }
-                    } else {
-                        connectionState = this.wsConnected ? 'connected' : 'disconnected';
-                    }
-                    
                     return {
                         index: typeof item.index === 'number' ? item.index : 0,
                         slots: slotsArr.map(slot => {
@@ -801,8 +790,7 @@ createApp({
                             };
                         }),
                         feedAssistSlot: typeof item.feed_assist_slot === 'number' ? item.feed_assist_slot : -1,
-                        rfidSyncEnabled: typeof item.rfid_sync_enabled === 'boolean' ? item.rfid_sync_enabled : this.rfidSyncEnabled,
-                        connectionState: connectionState
+                        rfidSyncEnabled: typeof item.rfid_sync_enabled === 'boolean' ? item.rfid_sync_enabled : this.rfidSyncEnabled
                     };
                 });
                 const selectedPanel = this.instancesPanels.find(p => p.index === this.selectedInstance) || this.instancesPanels[0];
@@ -857,8 +845,9 @@ createApp({
             }
         },
         
-        onInstanceChange() {
-            this.loadStatus();
+        async onInstanceChange() {
+            await this.loadStatus();
+            this.loadConnectionStatus(); // ensure connection details are updated
         },
         
         getSlotFromTool(tool) {
@@ -1143,6 +1132,7 @@ createApp({
         
         async refreshStatus() {
             await this.loadStatus();
+            this.loadConnectionStatus();
             this.showNotification(this.t('notifications.refreshStatus'), 'success');
         },
         
@@ -1403,21 +1393,43 @@ createApp({
                 } else {
                     this.connectionDetails = [];
                 }
+                if (ACE_DASHBOARD_CONFIG?.debug) {
+                    console.log('Connection details updated:', this.connectionDetails);
+                }
             } catch (e) {
                 console.error('Failed to load connection status', e);
+                this.connectionDetails = [];
             }
         },
         
-        getInstanceConnectionClass(instanceIndex) {
-            const panel = this.instancesPanels.find(p => p.index === instanceIndex);
-            if (!panel) return 'unknown';
-            return panel.connectionState || 'unknown';
+        // Kept for diagnostics modal, not used in tiles
+        getInstanceDotClass(instanceIndex) {
+            const det = this.connectionDetails.find(d => d.instance === instanceIndex);
+            if (!det) return 'unknown';
+            if (!det.connected) return 'disconnected';
+            if (det.stable) return 'connected';
+            return 'unstable';
         },
         
         getInstanceConnectionTooltip(instanceIndex) {
             const det = this.connectionDetails.find(d => d.instance === instanceIndex);
             if (!det) return 'Unknown';
             return `Connected: ${det.connected ? 'Yes' : 'No'}, Stable: ${det.stable ? 'Yes' : 'No'}, Reconnects: ${det.recent_reconnects || 0}`;
+        },
+
+        // Kept for header status
+        getSelectedInstanceDotClass() {
+            const status = this.connectionBadgeClass();
+            const map = {
+                'connected': 'connected',
+                'disconnected': 'disconnected',
+                'reconnecting': 'unstable',
+                'connecting': 'unstable',
+                'initializing': 'unknown',
+                'disabled': 'unknown',
+                'unknown': 'unknown'
+            };
+            return map[status] || 'unknown';
         },
         
         async reconnectInstance(instanceIndex) {
@@ -1812,6 +1824,7 @@ createApp({
 
         updateContainerHeight() {
             let maxBottom = 100;
+            let maxRight = 100;
             
             const cards = [
                 'deviceStatus', 'dryer', 'currentPrint', 'temperatures',
@@ -1821,19 +1834,18 @@ createApp({
             cards.forEach(cardId => {
                 const bottom = this.cardPositions[cardId].y + this.cardSizes[cardId].height;
                 maxBottom = Math.max(maxBottom, bottom);
-            });
-            
-            this.containerHeight = maxBottom + 100;
-            
-            let maxRight = 100;
-            cards.forEach(cardId => {
+                
                 const right = this.cardPositions[cardId].x + this.cardSizes[cardId].width;
                 maxRight = Math.max(maxRight, right);
             });
             
+            this.containerHeight = maxBottom + 100;
+            
+            // Set min-width on scroll container to allow horizontal scrolling
             const container = this.$refs.scrollContainer;
-            if (container && maxRight > container.clientWidth) {
-                container.style.minWidth = maxRight + 50 + 'px';
+            if (container && !this.isMobile) {
+                // Add extra margin for safety
+                container.style.minWidth = (maxRight + 50) + 'px';
             }
         },
 
@@ -2068,6 +2080,10 @@ createApp({
                     newHeight = potentialHeight;
                     newTop = startTop + (startHeight - potentialHeight);
                 }
+                
+                // Clamp size to container dimensions
+                newWidth = Math.min(containerRect.width, newWidth);
+                newHeight = Math.min(containerRect.height, newHeight);
                 
                 if (this.snapToGrid) {
                     newWidth = Math.round(newWidth / this.gridSize) * this.gridSize;

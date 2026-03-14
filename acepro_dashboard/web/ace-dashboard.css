@@ -790,6 +790,7 @@ body {
     color: #e6e9ed;
 }
 
+/* Connection dot classes kept for header and modal, but not used in tiles */
 .connection-dot {
     width: 12px;
     height: 12px;
@@ -1137,6 +1138,13 @@ input:checked + .slider:before {
     margin-top: 20px;
     padding-bottom: 40px;
     overflow: visible;
+}
+
+/* Ensure desktop container can scroll horizontally when needed */
+.cards-scroll-container {
+    overflow-x: auto;
+    overflow-y: visible;
+    width: 100%;
 }
 
 .dashboard-card {
