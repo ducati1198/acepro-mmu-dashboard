@@ -24,7 +24,6 @@ cd ~/acepro_mmu_dashboard
 
 chmod +x install.sh
 
-Run it:
 ./install.sh
 
 Answer the interactive prompts to choose which components to install and where.
