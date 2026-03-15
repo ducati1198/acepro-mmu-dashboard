@@ -91,13 +91,11 @@
                     </button>
                     <!-- Layout action buttons - hidden on mobile -->
                     <template v-if="layoutEditMode && !isMobile">
-                        <button @click="saveCardLayout" class="btn btn-sm btn-success">Save Layout</button>
+                        <!-- Save Layout button removed -->
                         <button @click="resetCardLayout" class="btn btn-sm btn-warning">Reset Layout</button>
-                        <button @click="toggleSnapToGrid" class="btn btn-sm" :class="snapToGrid ? 'btn-info' : 'btn-secondary'">
-                            Snap: {{ snapToGrid ? 'ON' : 'OFF' }}
-                        </button>
-                        <button @click="arrangeHorizontally" class="btn btn-sm btn-info">Arrange H</button>
-                        <button @click="arrangeVertically" class="btn btn-sm btn-info">Arrange V</button>
+                        <!-- Snap to grid button removed -->
+                        <!-- Arrange H button removed -->
+                        <button @click="arrangeVertically" class="btn btn-sm btn-info">Arrange Vertically</button>
                     </template>
                 </div>
             </header>
@@ -546,7 +544,7 @@
                                         <span class="temp-label">{{ fan.icon }} {{ fan.displayName }}</span>
                                         <span class="temp-value">
                                             {{ fan.speed }}%
-                                            <span v-if="fan.rpm" class="fan-rpm">({{ fan.rpm }} RPM)</span>
+                                            <span v-if="fan.rpm" class="fan-rpm">({{ Math.round(fan.rpm) }} RPM)</span>
                                             <span v-if="fan.temperature" class="fan-temp"> | {{ fan.temperature?.toFixed(1) }}°C</span>
                                         </span>
                                     </div>
