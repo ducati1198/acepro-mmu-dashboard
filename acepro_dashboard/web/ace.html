@@ -2,755 +2,393 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>ACE + Printer Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACE Control Panel</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="ace-dashboard.css?v=20260401">
-    <!-- Vue 3 -->
+    <link rel="stylesheet" href="ace-dashboard.css?v=20260330">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- Dashboard config -->
-    <script src="ace-dashboard-config.js?v=20260401"></script>
+    <script src="ace-dashboard-config.js?v=20260330"></script>
 </head>
 <body>
     <div id="app">
-        <!-- Hidden file input for import -->
-        <input type="file" ref="importFile" accept=".json" @change="importSettings" style="display:none;">
-
-        <!-- Global color picker modal -->
-        <div v-if="showColorModal" class="modal-overlay" @click="closeColorModal">
-            <div class="modal" @click.stop>
-                <h3>{{ t('dialogs.editColor') }}</h3>
-                <div class="color-picker-container">
-                    <input type="color" v-model="selectedColorHex" class="native-color-picker">
-                    <div class="form-group">
-                        <label>{{ t('dialogs.hex') }}</label>
-                        <input type="text" v-model="selectedColorHex" placeholder="#RRGGBB">
-                    </div>
-                </div>
-                <div class="modal-actions">
-                    <button @click="saveColor" class="btn btn-primary">{{ t('dialogs.save') }}</button>
-                    <button @click="closeColorModal" class="btn btn-secondary">{{ t('dialogs.cancel') }}</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="page-wrapper">
-            <!-- Instance Overview Tiles (dots removed) -->
-            <div class="instance-overview" v-if="instancesPanels.length > 0">
-                <div 
-                    v-for="inst in instancesPanels" 
-                    :key="inst.index"
-                    class="instance-tile"
-                    :class="{ active: inst.index === selectedInstance }"
-                    @click="selectInstance(inst.index)"
-                >
-                    <div class="tile-header">
-                        <span class="instance-badge">{{ t('header.instanceLabel', { index: inst.index }) }}</span>
-                        <!-- Connection dot removed -->
-                    </div>
-                    <div class="slot-dots">
-                        <div 
-                            v-for="slot in inst.slots" 
-                            :key="slot.index"
-                            class="slot-dot"
-                            :style="{ backgroundColor: getColorHex(slot.color) }"
-                            :title="`Slot ${slot.index}: ${slot.material || 'Empty'}`"
-                        ></div>
-                    </div>
-                    <div class="tile-footer">
-                        <span v-if="inst.feedAssistSlot !== -1" class="feed-assist-icon" title="Feed Assist Active">⚙️</span>
-                    </div>
-                </div>
-            </div>
-
+        <div class="container">
             <!-- Header -->
             <header class="header">
-                <h1>ACE + Printer Dashboard</h1>
+                <h1>{{ t('header.title') }}</h1>
                 <div class="header-actions">
-                    <!-- Instance selector with color swatch -->
                     <div class="instance-select" v-if="instanceOptions.length > 0">
                         <span class="label">{{ t('header.instance') }}</span>
-                        <div class="select-wrapper">
-                            <select v-model.number="selectedInstance" @change="onInstanceChange">
-                                <option v-for="opt in instanceOptions" :key="opt.index" :value="opt.index">
-                                    {{ t('header.instanceLabel', { index: opt.index }) }}
-                                </option>
-                            </select>
-                            <div class="instance-swatch" :style="{ backgroundColor: getInstanceAvgColor(selectedInstance) }"></div>
-                        </div>
+                        <select v-model.number="selectedInstance" @change="onInstanceChange">
+                            <option v-for="opt in instanceOptions" :key="opt.index" :value="opt.index">
+                                {{ t('header.instanceLabel', { index: opt.index }) }}
+                            </option>
+                        </select>
                     </div>
-                    <!-- Connection status with diagnostics button -->
-                    <div class="connection-status" :class="connectionBadgeClass()" @click="showConnectionModal = true">
+                    <div class="connection-status" :class="connectionBadgeClass()">
                         <span class="status-dot"></span>
                         <span>{{ getConnectionStateText(connectionBadgeClass()) }}</span>
-                        <span class="info-icon">ℹ️</span>
                     </div>
-                    <!-- Layout Edit Toggle - hidden on mobile -->
-                    <button v-if="!isMobile" @click="toggleLayoutEdit" class="btn btn-sm" :class="layoutEditMode ? 'btn-primary' : 'btn-secondary'">
-                        {{ layoutEditMode ? 'Exit Edit' : 'Edit Layout' }}
-                    </button>
-                    <!-- Layout action buttons - hidden on mobile -->
-                    <template v-if="layoutEditMode && !isMobile">
-                        <!-- Save Layout button removed -->
-                        <button @click="resetCardLayout" class="btn btn-sm btn-warning">Reset Layout</button>
-                        <!-- Snap to grid button removed -->
-                        <!-- Arrange H button removed -->
-                        <button @click="arrangeVertically" class="btn btn-sm btn-info">Arrange Vertically</button>
-                    </template>
                 </div>
             </header>
 
-            <!-- Print Status Bar -->
-            <div class="print-status" v-if="printState !== 'standby'">
-                <div class="print-info">
-                    <span class="print-state" :class="printState">{{ printState }}</span>
-                    <span class="print-filename">{{ printFilename || 'Unknown file' }}</span>
-                    <span class="print-progress-text">{{ printProgress }}%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" :style="{ width: printProgress + '%' }"></div>
-                </div>
-            </div>
-
-            <!-- Connection Diagnostics Modal -->
-            <div v-if="showConnectionModal" class="modal-overlay" @click="showConnectionModal = false">
-                <div class="modal modal-wide" @click.stop>
-                    <h3>ACE Connection Diagnostics</h3>
-                    <div class="connection-details" v-if="connectionDetails.length">
-                        <div v-for="det in connectionDetails" :key="det.instance" class="connection-instance">
-                            <h4>ACE {{ det.instance }}</h4>
-                            <table>
-                                <tr><td>Connected:</td><td>{{ det.connected ? 'Yes' : 'No' }}</td></tr>
-                                <tr><td>Stable:</td><td>{{ det.stable ? 'Yes' : 'No' }}</td></tr>
-                                <tr><td>Recent reconnects:</td><td>{{ det.recent_reconnects }} (last 180s)</td></tr>
-                                <tr><td>Time connected:</td><td>{{ det.time_connected.toFixed(0) }}s</td></tr>
-                                <tr><td>Port:</td><td>{{ det.port }}</td></tr>
-                                <tr><td>USB topology:</td><td>{{ det.usb_topology }}</td></tr>
-                                <tr><td>Next retry:</td><td>{{ det.next_retry.toFixed(1) }}s</td></tr>
-                                <tr><td>Supervision timeouts:</td><td>{{ det.supervision?.timeout_count || 0 }} / {{ det.supervision?.timeout_threshold }}</td></tr>
-                                <tr><td>Unsolicited msgs:</td><td>{{ det.supervision?.unsolicited_count || 0 }} / {{ det.supervision?.unsolicited_threshold }}</td></tr>
-                            </table>
-                            <button @click="reconnectInstance(det.instance)" class="btn btn-sm btn-warning">Reconnect</button>
+            <!-- Device Status Card -->
+            <div class="card-row">
+                <div class="card device-status-card compact">
+                    <h2>{{ t('cards.deviceStatus') }}</h2>
+                    <div class="device-info two-col">
+                        <div class="info-col">
+                            <div class="info-row">
+                                <span class="label">{{ t('deviceInfo.model') }}:</span>
+                                <span class="value">{{ deviceStatus.model || t('common.unknown') }}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">{{ t('deviceInfo.firmware') }}:</span>
+                                <span class="value">{{ deviceStatus.firmware || t('common.unknown') }}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">{{ t('deviceInfo.bootFirmware') }}:</span>
+                                <span class="value">{{ deviceStatus.boot_firmware || t('common.unknown') }}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">{{ t('deviceInfo.usb') }}:</span>
+                                <span class="value">{{ formatUsbPath(deviceStatus.usb_port, deviceStatus.usb_path) }}</span>
+                            </div>
+                        </div>
+                        <div class="info-col">
+                            <div class="info-row">
+                                <span class="label">{{ t('deviceInfo.status') }}:</span>
+                                <span class="value status-badge" :class="deviceStatus.status">
+                                    {{ getStatusText(deviceStatus.status) }}
+                                </span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">{{ t('deviceInfo.temp') }}:</span>
+                                <span class="value">{{ deviceStatus.temp || 0 }}°C</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">{{ t('deviceInfo.rfid') }}:</span>
+                                <span class="value">{{ deviceStatus.enable_rfid ? t('deviceInfo.rfidOn') : t('deviceInfo.rfidOff') }}</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="modal-actions">
-                        <button @click="refreshConnectionStatus" class="btn btn-secondary">Refresh</button>
-                        <button @click="showConnectionModal = false" class="btn btn-primary">Close</button>
-                    </div>
                 </div>
-            </div>
 
-            <!-- Alignment Guides (desktop only) -->
-            <div v-if="!isMobile && layoutEditMode && dragState.active" class="alignment-guides">
-                <div class="guide-x" :style="{ left: dragState.guideX + 'px' }" v-if="dragState.guideX !== null"></div>
-                <div class="guide-y" :style="{ top: dragState.guideY + 'px' }" v-if="dragState.guideY !== null"></div>
-            </div>
-
-            <!-- Cards Container (desktop draggable, mobile static) -->
-            <div class="cards-scroll-container" ref="scrollContainer" @scroll="onContainerScroll">
-                <div class="cards-container" :style="!isMobile ? { height: containerHeight + 'px' } : {}">
-                    <!-- Device Status Card -->
-                    <div 
-                        ref="deviceStatusCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'deviceStatus',
-                            'resizing': dragState.active && dragState.cardId === 'deviceStatus' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.deviceStatus.x + 'px',
-                            top: cardPositions.deviceStatus.y + 'px',
-                            width: cardSizes.deviceStatus.width + 'px',
-                            height: cardSizes.deviceStatus.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'deviceStatus' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'deviceStatus' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'deviceStatus' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
-                    >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'deviceStatus')">
-                            Device Status
-                            <button v-if="isMobile" @click.stop="toggleCard('deviceStatus')" class="card-toggle">{{ cardExpanded.deviceStatus ? '▼' : '▶' }}</button>
-                        </div>
-                        <div class="card-content" v-if="!isMobile || cardExpanded.deviceStatus">
-                            <div class="device-info two-col">
-                                <div class="info-col">
-                                    <div class="info-row"><span class="label">Model:</span><span class="value">{{ deviceStatus.model || 'Unknown' }}</span></div>
-                                    <div class="info-row"><span class="label">Firmware:</span><span class="value">{{ deviceStatus.firmware || 'N/A' }}</span></div>
-                                    <div class="info-row"><span class="label">Boot FW:</span><span class="value">{{ deviceStatus.boot_firmware || 'N/A' }}</span></div>
-                                    <div class="info-row"><span class="label">USB:</span><span class="value">{{ formatUsbPath(deviceStatus.usb_port, deviceStatus.usb_path) }}</span></div>
+                <!-- Dryer Control Card -->
+                <div class="card dryer-card compact">
+                    <div class="dryer-instance-selector">
+                        <span>Dryer ACE Instance:</span>
+                        <select v-model.number="selectedDryerInstance" @change="onDryerInstanceChange">
+                            <option v-for="opt in instanceOptions" :key="opt.index" :value="opt.index">
+                                {{ t('header.instanceLabel', { index: opt.index }) }}
+                            </option>
+                        </select>
+                    </div>
+                    <h2>{{ t('cards.dryer') }}</h2>
+                    <div class="dryer-status compact">
+                        <div class="dryer-row inputs">
+                            <div class="control-group inline">
+                                <label>{{ t('dryer.inputs.temp') }}</label>
+                                <input type="number" v-model.number="dryingTemp" min="20" max="55" :disabled="dryerStatus.status === 'drying'">
+                            </div>
+                            <div class="duration-group">
+                                <div class="control-group">
+                                    <label>Hours</label>
+                                    <input type="number" v-model.number="dryingHours" min="0" max="24" :disabled="dryerStatus.status === 'drying'">
                                 </div>
-                                <div class="info-col">
-                                    <div class="info-row"><span class="label">Status:</span><span class="value status-badge" :class="deviceStatus.status">{{ getStatusText(deviceStatus.status) }}</span></div>
-                                    <div class="info-row"><span class="label">Temp:</span><span class="value">{{ deviceStatus.temp || 0 }}°C</span></div>
-                                    <div class="info-row"><span class="label">RFID:</span><span class="value">{{ deviceStatus.enable_rfid ? 'Enabled' : 'Disabled' }}</span></div>
+                                <div class="control-group">
+                                    <label>Minutes</label>
+                                    <input type="number" v-model.number="dryingMinutes" min="0" max="59" :disabled="dryerStatus.status === 'drying'">
                                 </div>
                             </div>
                         </div>
-                        <!-- Resize handles (desktop only) -->
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'deviceStatus', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'deviceStatus', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'deviceStatus', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'deviceStatus', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'deviceStatus', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'deviceStatus', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'deviceStatus', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'deviceStatus', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'deviceStatus' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.deviceStatus.width }} x {{ cardSizes.deviceStatus.height }}
+                        <div class="dryer-row actions">
+                            <div class="control-group inline">
+                                <span class="label">{{ t('dryer.status') }}:</span>
+                                <span class="value status-badge" :class="dryerStatus.status">
+                                    {{ getDryerStatusText(dryerStatus.status) }}
+                                </span>
                             </div>
-                            <div v-if="dragState.active && dragState.cardId === 'deviceStatus' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
+                            <div class="button-group tight">
+                                <button @click="startDryingFromInput" :disabled="dryerStatus.status === 'drying'" class="btn btn-primary">
+                                    {{ t('dryer.buttons.start') }}
+                                </button>
+                                <button @click="stopDrying" :disabled="dryerStatus.status === 'stop'" class="btn btn-danger">
+                                    {{ t('dryer.buttons.stop') }}
+                                </button>
+                            </div>
+                        </div>
+                        <div v-if="dryerStatus.status === 'drying'" class="dryer-progress">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" :style="{ width: dryerProgress + '%' }"></div>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">{{ t('dryer.remainingTime') }}:</span>
+                                <span class="value">{{ formattedRemaining }}</span>
+                            </div>
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <!-- Current Print Card -->
+            <!-- Slots Grid -->
+            <div class="card slots-card">
+                <h2>{{ t('cards.slots') }}</h2>
+                <div class="current-tool-indicator" :class="{ none: currentTool < 0 }">
+                    Current Loaded: {{ currentTool >= 0 ? `T${currentTool}` : 'None' }}
+                </div>
+                <div class="instances-wrapper">
                     <div 
-                        ref="currentPrintCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'currentPrint',
-                            'resizing': dragState.active && dragState.cardId === 'currentPrint' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.currentPrint.x + 'px',
-                            top: cardPositions.currentPrint.y + 'px',
-                            width: cardSizes.currentPrint.width + 'px',
-                            height: cardSizes.currentPrint.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'currentPrint' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'currentPrint' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'currentPrint' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
+                        v-for="inst in instancesPanels"
+                        :key="inst.index"
+                        class="instance-panel"
+                        :class="{ active: inst.index === selectedInstance }"
                     >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'currentPrint')">
-                            Current Print
-                            <button v-if="isMobile" @click.stop="toggleCard('currentPrint')" class="card-toggle">{{ cardExpanded.currentPrint ? '▼' : '▶' }}</button>
+                        <div class="instance-header">
+                            <span>{{ t('header.instanceLabel', { index: inst.index }) }}</span>
+                            <span v-if="inst.index === selectedInstance" class="current-badge">Current</span>
                         </div>
-                        <div class="card-content print-status-compact" v-if="(!isMobile || cardExpanded.currentPrint) && printStats">
-                            <div class="info-row"><span class="label">State:</span><span class="value status-badge" :class="printStats.state">{{ printStats.state }}</span></div>
-                            <div class="info-row" v-if="printStats.filename"><span class="label">File:</span><span class="value filename">{{ printStats.filename }}</span></div>
-                            <div class="info-row" v-if="printStats.total_duration && printStats.print_duration"><span class="label">Progress:</span><span class="value">{{ printProgress }}%</span></div>
-                            <div class="progress-bar" v-if="printStats.total_duration && printStats.print_duration"><div class="progress-fill" :style="{ width: printProgress + '%' }"></div></div>
-                            <div class="info-row" v-if="printStats.total_duration && printStats.print_duration"><span class="label">Remaining:</span><span class="value">{{ formatRemaining(printStats.total_duration, printStats.print_duration) }}</span></div>
-                        </div>
-                        <div v-else-if="!isMobile || cardExpanded.currentPrint" class="card-content">No active print</div>
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'currentPrint', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'currentPrint', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'currentPrint', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'currentPrint', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'currentPrint', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'currentPrint', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'currentPrint', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'currentPrint', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'currentPrint' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.currentPrint.width }} x {{ cardSizes.currentPrint.height }}
-                            </div>
-                            <div v-if="dragState.active && dragState.cardId === 'currentPrint' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
-                    </div>
-
-                    <!-- Filament Slots Card -->
-                    <div 
-                        ref="filamentSlotsCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'filamentSlots',
-                            'resizing': dragState.active && dragState.cardId === 'filamentSlots' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.filamentSlots.x + 'px',
-                            top: cardPositions.filamentSlots.y + 'px',
-                            width: cardSizes.filamentSlots.width + 'px',
-                            height: cardSizes.filamentSlots.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'filamentSlots' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'filamentSlots' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'filamentSlots' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
-                    >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'filamentSlots')">
-                            Filament Slots
-                            <button v-if="isMobile" @click.stop="toggleCard('filamentSlots')" class="card-toggle">{{ cardExpanded.filamentSlots ? '▼' : '▶' }}</button>
-                        </div>
-                        <div class="card-content slots-content" v-if="!isMobile || cardExpanded.filamentSlots">
-                            <div class="current-tool-indicator" :class="{ none: currentTool < 0 }">
-                                Current Loaded: {{ currentTool >= 0 ? `T${currentTool}` : 'None' }}
-                            </div>
-                            <div class="instances-wrapper">
-                                <div 
-                                    v-for="inst in instancesPanels"
-                                    :key="inst.index"
-                                    class="instance-panel"
-                                    :class="{ active: inst.index === selectedInstance }"
-                                >
-                                    <div class="instance-header">
-                                        <span>{{ t('header.instanceLabel', { index: inst.index }) }}</span>
-                                        <span class="rfid-sync-badge" v-if="inst.rfidSyncEnabled" title="RFID Sync Enabled">📡</span>
+                        <div class="slots-grid">
+                            <div 
+                                v-for="slot in inst.slots" 
+                                :key="slot.index"
+                                class="slot-card"
+                                :class="{ 
+                                    ready: slot.status === 'ready',
+                                    empty: slot.status === 'empty',
+                                    busy: slot.status === 'busy',
+                                    active: isCurrentToolSlot(slot, inst.index)
+                                }"
+                            >
+                                <div class="slot-header">
+                                    <h3 class="tool-title" v-if="slot.tool !== null && slot.tool !== undefined">T{{ slot.tool }} <span class="slot-sub" v-if="slot.index !== undefined">({{ t('slots.slot') }} {{ slot.index }})</span></h3>
+                                    <h3 v-else>{{ t('slots.slot') }} {{ slot.index }}</h3>
+                                    <span v-if="isCurrentToolSlot(slot, inst.index)" class="current-tool-badge">LOADED</span>
+                                    <span v-if="isRfidIdentified(slot.rfid)" class="rfid-badge">{{ t('slots.rfid') }}</span>
+                                    <span class="slot-status-badge" :class="slot.status">
+                                        {{ getSlotStatusText(slot.status) }}
+                                    </span>
+                                </div>
+                                
+                                <div class="spool" :class="{ locked: isSlotLocked(inst, slot) }" @click.stop="openColorPickerModal(slot, inst.index)">
+                                    <svg viewBox="0 0 200 140" class="spool-svg" aria-hidden="true">
+                                        <ellipse cx="60" cy="70" rx="36" ry="64" class="spool-flange-back"/>
+                                        <rect x="58" y="18" width="90" height="104" rx="40" ry="40" :fill="getColorHex(slot.color)" class="spool-body"/>
+                                        <ellipse cx="142" cy="70" rx="36" ry="64" class="spool-flange-front"/>
+                                        <ellipse cx="142" cy="70" rx="10" ry="20" class="spool-hole"/>
+                                    </svg>
+                                </div>
+                                
+                                <div class="slot-info">
+                                    <div class="info-item">
+                                        <span class="label">{{ t('slots.type') }}:</span>
+                                        <!-- Material dropdown that includes built-in materials + Orca presets -->
+                                        <select class="material-select" :value="slot.material || slot.type || ''" @change="setSlotMaterial(slot.index, inst.index, slot.tool, $event.target.value, slot.color, slot.temp)" :disabled="isSlotLocked(inst, slot)">
+                                            <optgroup label="Built‑in Materials">
+                                                <option v-for="(temp, mat) in materialOptions" :key="mat" :value="mat">{{ mat }}</option>
+                                            </optgroup>
+                                            <optgroup v-if="presets.length" label="Orca Presets">
+                                                <option v-for="p in presets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                                            </optgroup>
+                                        </select>
                                     </div>
-                                    <div class="slots-grid">
-                                        <div 
-                                            v-for="slot in inst.slots" 
-                                            :key="slot.index"
-                                            class="slot-card"
-                                            :class="{ 
-                                                ready: slot.status === 'ready',
-                                                empty: slot.status === 'empty',
-                                                busy: slot.status === 'busy',
-                                                active: isCurrentToolSlot(slot, inst.index),
-                                                animating: isAnimating(inst.index, slot.index)
-                                            }"
+                                    <div class="info-item">
+                                        <span class="label">{{ t('slots.temp') }}:</span>
+                                        <input 
+                                            class="temp-input" 
+                                            type="number" 
+                                            min="1" 
+                                            max="300" 
+                                            :value="slot.temp || 0" 
+                                            @blur="commitSlotTemp(slot.index, inst.index, slot.tool, $event, slot.color, slot.material || slot.type || '')"
+                                            @keydown.enter.prevent="commitSlotTemp(slot.index, inst.index, slot.tool, $event, slot.color, slot.material || slot.type || '')"
+                                            :disabled="isSlotLocked(inst, slot)"
                                         >
-                                            <div class="slot-header">
-                                                <h3 class="tool-title" v-if="slot.tool !== null && slot.tool !== undefined">T{{ slot.tool }} <span class="slot-sub" v-if="slot.index !== undefined">({{ t('slots.slot') }} {{ slot.index }})</span></h3>
-                                                <h3 v-else>{{ t('slots.slot') }} {{ slot.index }}</h3>
-                                                <span v-if="isCurrentToolSlot(slot, inst.index)" class="current-tool-badge">LOADED</span>
-                                                <span v-if="isRfidIdentified(slot.rfid)" class="rfid-badge">{{ t('slots.rfid') }}</span>
-                                                <span class="slot-status-badge" :class="slot.status">
-                                                    {{ getSlotStatusText(slot.status) }}
-                                                </span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">{{ t('slots.sku') }}:</span>
+                                        <span class="value">{{ slot.sku || t('common.unknown') }}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">{{ t('slots.rfid') }}:</span>
+                                        <span class="value">{{ getRfidStatusText(slot.rfid) }}</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Feed/Retract Controls -->
+                                <div class="feed-retract-controls">
+                                    <div class="feed-section">
+                                        <button @click="executeCustomFeed(slot, inst.index)" :disabled="slot.status !== 'ready'" class="btn btn-sm btn-primary">Feed</button>
+                                        <div class="input-row">
+                                            <div class="input-field">
+                                                <label>Length (mm)</label>
+                                                <input type="number" v-model.number="slot.customFeedLength" min="1" max="2000" :disabled="slot.status !== 'ready'">
                                             </div>
-                                            
-                                            <!-- Spool -->
-                                            <div class="spool" :class="{ locked: isSlotLocked(inst, slot) }" @click.stop="openColorModal(inst.index, slot)">
-                                                <svg viewBox="0 0 200 140" class="spool-svg" aria-hidden="true">
-                                                    <ellipse cx="60" cy="70" rx="36" ry="64" class="spool-flange-back"/>
-                                                    <rect x="58" y="18" width="90" height="104" rx="40" ry="40" :fill="getColorHex(slot.color)" class="spool-body"/>
-                                                    <ellipse cx="142" cy="70" rx="36" ry="64" class="spool-flange-front"/>
-                                                    <ellipse cx="142" cy="70" rx="10" ry="20" class="spool-hole"/>
-                                                </svg>
+                                            <div class="input-field">
+                                                <label>Speed (mm/s)</label>
+                                                <input type="number" v-model.number="slot.customFeedSpeed" min="1" max="100" :disabled="slot.status !== 'ready'">
                                             </div>
-                                            
-                                            <div class="slot-info">
-                                                <div class="info-item">
-                                                    <span class="label">{{ t('slots.type') }}:</span>
-                                                    <select class="material-select" :value="slot.material || slot.type || ''" @change="setSlotMaterial(slot.index, inst.index, slot.tool, $event.target.value, slot.color, slot.temp)" :disabled="isSlotLocked(inst, slot)">
-                                                        <option v-for="(temp, mat) in materialOptions" :key="mat" :value="mat">{{ mat }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="info-item">
-                                                    <span class="label">{{ t('slots.temp') }}:</span>
-                                                    <input 
-                                                        class="temp-input" 
-                                                        type="number" 
-                                                        min="1" 
-                                                        max="300" 
-                                                        v-model.number="tempInputs[`${inst.index}-${slot.index}`]" 
-                                                        @focus="tempInputs[`${inst.index}-${slot.index}`] = slot.temp"
-                                                        @blur="commitTempInput(inst.index, slot.index, slot.tool, slot.color, slot.material || slot.type || '')"
-                                                        @keydown.enter.prevent="commitSlotTemp(slot.index, inst.index, slot.tool, $event, slot.color, slot.material || slot.type || '')"
-                                                        :disabled="isSlotLocked(inst, slot)"
-                                                    >
-                                                </div>
-                                                <div class="info-item">
-                                                    <span class="label">{{ t('slots.sku') }}:</span>
-                                                    <span class="value">{{ slot.sku || t('common.unknown') }}</span>
-                                                </div>
-                                                <div class="info-item">
-                                                    <span class="label">{{ t('slots.rfid') }}:</span>
-                                                    <span class="value">{{ getRfidStatusText(slot.rfid) }}</span>
-                                                </div>
+                                        </div>
+                                    </div>
+                                    <div class="retract-section">
+                                        <button @click="executeCustomRetract(slot, inst.index)" :disabled="slot.status !== 'ready'" class="btn btn-sm btn-secondary">Retract</button>
+                                        <div class="input-row">
+                                            <div class="input-field">
+                                                <label>Length (mm)</label>
+                                                <input type="number" v-model.number="slot.customRetractLength" min="1" max="2000" :disabled="slot.status !== 'ready'">
                                             </div>
-                                            
-                                            <div class="slot-actions">
-                                                <button 
-                                                    @click="changeToolForInstance(slot.tool !== null && slot.tool !== undefined ? slot.tool : slot.index, inst.index)" 
-                                                    :disabled="slot.status !== 'ready' || isCurrentToolSlot(slot, inst.index)"
-                                                    class="btn btn-sm btn-primary"
-                                                >
-                                                    {{ t('buttons.load') }}
-                                                </button>
-                                                <button 
-                                                    @click="unloadFilament(inst.index)" 
-                                                    class="btn btn-sm btn-secondary"
-                                                >
-                                                    {{ t('buttons.unload') }}
-                                                </button>
-                                                <button 
-                                                    @click="showFeedDialog(slot.index)" 
-                                                    class="btn btn-sm btn-info"
-                                                >
-                                                    Feed
-                                                </button>
-                                                <button 
-                                                    @click="showRetractDialog(slot.index)" 
-                                                    class="btn btn-sm btn-info"
-                                                >
-                                                    Retract
-                                                </button>
-                                                <button 
-                                                    @click="enableFeedAssist(slot.index, inst.index)" 
-                                                    :disabled="slot.status !== 'ready' || inst.feedAssistSlot === slot.index"
-                                                    class="btn btn-sm btn-success"
-                                                >
-                                                    Assist ON
-                                                </button>
-                                                <button 
-                                                    @click="disableFeedAssist(slot.index, inst.index)" 
-                                                    :disabled="inst.feedAssistSlot !== slot.index"
-                                                    class="btn btn-sm btn-warning"
-                                                >
-                                                    Assist OFF
-                                                </button>
+                                            <div class="input-field">
+                                                <label>Speed (mm/s)</label>
+                                                <input type="number" v-model.number="slot.customRetractSpeed" min="1" max="100" :disabled="slot.status !== 'ready'">
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'filamentSlots', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'filamentSlots', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'filamentSlots', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'filamentSlots', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'filamentSlots', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'filamentSlots', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'filamentSlots', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'filamentSlots', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'filamentSlots' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.filamentSlots.width }} x {{ cardSizes.filamentSlots.height }}
-                            </div>
-                            <div v-if="dragState.active && dragState.cardId === 'filamentSlots' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
-                    </div>
 
-                    <!-- Dryer Control Card -->
-                    <div 
-                        ref="dryerCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'dryer',
-                            'resizing': dragState.active && dragState.cardId === 'dryer' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.dryer.x + 'px',
-                            top: cardPositions.dryer.y + 'px',
-                            width: cardSizes.dryer.width + 'px',
-                            height: cardSizes.dryer.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'dryer' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'dryer' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'dryer' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
-                    >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'dryer')">
-                            Dryer Control
-                            <button v-if="isMobile" @click.stop="toggleCard('dryer')" class="card-toggle">{{ cardExpanded.dryer ? '▼' : '▶' }}</button>
-                        </div>
-                        <div class="card-content" v-if="!isMobile || cardExpanded.dryer">
-                            <!-- Instance selector styled like header -->
-                            <div class="instance-select" style="margin-bottom: 12px;">
-                                <span class="label">Control Instance:</span>
-                                <div class="select-wrapper">
-                                    <select v-model="dryerInstance" @change="updateDryerInstance">
-                                        <option v-for="opt in instanceOptions" :key="opt.index" :value="opt.index">ACE {{ opt.index }}</option>
-                                        <option value="all">All Instances</option>
-                                    </select>
-                                    <!-- No swatch needed -->
-                                </div>
-                            </div>
-                            <div class="dryer-row inputs">
-                                <div class="control-group inline">
-                                    <label>Temp (°C):</label>
-                                    <input type="number" v-model.number="dryingTemp" min="20" max="55" :disabled="dryerStatus.status === 'drying'">
-                                </div>
-                                <div class="control-group inline">
-                                    <label>Duration</label>
-                                    <div class="duration-inputs">
-                                        <input type="number" v-model.number="dryingHours" min="0" max="24" :disabled="dryerStatus.status === 'drying'"> h
-                                        <input type="number" v-model.number="dryingMinutes" min="0" max="59" :disabled="dryerStatus.status === 'drying'"> m
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="dryer-row actions">
-                                <span class="label">Status:</span>
-                                <span class="value status-badge" :class="dryerStatus.status">{{ getDryerStatusText(dryerStatus.status) }}
-                                    <span v-if="dryerStatus.status === 'drying' && formattedRemainingTime" class="remaining-time">({{ formattedRemainingTime }})</span>
-                                </span>
-                                <div class="button-group tight">
-                                    <button @click="startDrying" :disabled="dryerStatus.status === 'drying'" class="btn btn-primary">Start</button>
-                                    <button @click="stopDrying" :disabled="dryerStatus.status === 'stop'" class="btn btn-danger">Stop</button>
+                                <div class="slot-actions">
+                                    <button 
+                                        @click="changeToolForInstance(slot.tool !== null && slot.tool !== undefined ? slot.tool : slot.index, inst.index)" 
+                                        :disabled="slot.status !== 'ready' || isCurrentToolSlot(slot, inst.index)"
+                                        class="btn btn-sm btn-primary"
+                                    >
+                                        {{ t('buttons.load') }}
+                                    </button>
+                                    <button 
+                                        @click="unloadFilament(inst.index)" 
+                                        class="btn btn-sm btn-secondary"
+                                    >
+                                        {{ t('buttons.unload') }}
+                                    </button>
+                                    <button 
+                                        @click="enableFeedAssist(slot.index, inst.index)" 
+                                        :disabled="slot.status !== 'ready' || inst.feedAssistSlot === slot.index"
+                                        class="btn btn-sm btn-success"
+                                    >
+                                        {{ t('buttons.assistOn') }}
+                                    </button>
+                                    <button 
+                                        @click="disableFeedAssist(slot.index, inst.index)" 
+                                        :disabled="inst.feedAssistSlot !== slot.index"
+                                        class="btn btn-sm btn-warning"
+                                    >
+                                        {{ t('buttons.assistOff') }}
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'dryer', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'dryer', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'dryer', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'dryer', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'dryer', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'dryer', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'dryer', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'dryer', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'dryer' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.dryer.width }} x {{ cardSizes.dryer.height }}
-                            </div>
-                            <div v-if="dragState.active && dragState.cardId === 'dryer' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
                     </div>
+                </div>
+            </div>
 
-                    <!-- Temperatures Card -->
-                    <div 
-                        ref="temperaturesCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'temperatures',
-                            'resizing': dragState.active && dragState.cardId === 'temperatures' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.temperatures.x + 'px',
-                            top: cardPositions.temperatures.y + 'px',
-                            width: cardSizes.temperatures.width + 'px',
-                            height: cardSizes.temperatures.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'temperatures' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'temperatures' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'temperatures' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
-                    >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'temperatures')">
-                            Temperatures & Fans
-                            <button v-if="isMobile" @click.stop="toggleCard('temperatures')" class="card-toggle">{{ cardExpanded.temperatures ? '▼' : '▶' }}</button>
-                        </div>
-                        <div class="card-content" v-if="!isMobile || cardExpanded.temperatures">
-                            <!-- Heaters -->
-                            <div v-if="organizedTemperatures.heaters.length > 0" class="temp-section">
-                                <h4 class="temp-section-title">🔥 Heaters</h4>
-                                <div class="temp-grid">
-                                    <div v-for="item in organizedTemperatures.heaters" :key="item.name" class="temp-item">
-                                        <span class="temp-label">{{ item.displayName }}</span>
-                                        <span class="temp-value">{{ item.temperature?.toFixed(1) }}°C 
-                                            <span v-if="item.target" class="temp-target">/ {{ item.target?.toFixed(1) }}°C</span>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Sensors -->
-                            <div v-if="organizedTemperatures.sensors.length > 0" class="temp-section">
-                                <h4 class="temp-section-title">🌡️ Sensors</h4>
-                                <div class="temp-grid">
-                                    <div v-for="item in organizedTemperatures.sensors" :key="item.name" class="temp-item">
-                                        <span class="temp-label">{{ item.displayName }}</span>
-                                        <span class="temp-value">{{ item.temperature?.toFixed(1) }}°C</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Fans -->
-                            <div v-if="fans.length > 0" class="temp-section">
-                                <h4 class="temp-section-title">💨 Fans</h4>
-                                <div class="temp-grid">
-                                    <div v-for="fan in fans" :key="fan.name" class="temp-item">
-                                        <span class="temp-label">{{ fan.icon }} {{ fan.displayName }}</span>
-                                        <span class="temp-value">
-                                            {{ fan.speed }}%
-                                            <span v-if="fan.rpm" class="fan-rpm">({{ Math.round(fan.rpm) }} RPM)</span>
-                                            <span v-if="fan.temperature" class="fan-temp"> | {{ fan.temperature?.toFixed(1) }}°C</span>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Empty -->
-                            <div v-if="organizedTemperatures.heaters.length === 0 && organizedTemperatures.sensors.length === 0 && fans.length === 0" class="temp-empty">
-                                No temperature sensors or fans detected
-                            </div>
-                        </div>
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'temperatures', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'temperatures', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'temperatures', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'temperatures', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'temperatures', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'temperatures', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'temperatures', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'temperatures', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'temperatures' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.temperatures.width }} x {{ cardSizes.temperatures.height }}
-                            </div>
-                            <div v-if="dragState.active && dragState.cardId === 'temperatures' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
+            <!-- Preset Library Card (Collapsible Table) -->
+            <div class="card preset-library-card">
+                <h2 style="cursor: pointer;" @click="showPresetLibrary = !showPresetLibrary">
+                    Preset Library
+                    <span style="float: right;">{{ showPresetLibrary ? '▼' : '▶' }}</span>
+                </h2>
+                <div v-if="showPresetLibrary">
+                    <div v-if="presets.length === 0" class="info-row">
+                        No presets imported yet. Use "Import Orca Presets" to add filament profiles.
                     </div>
+                    <div v-else>
+                        <div class="preset-table">
+                            <div class="preset-header">
+                                <div class="preset-col-name">Filament Name</div>
+                                <div class="preset-col-material">Material</div>
+                                <div class="preset-col-temp">Temperature (°C)</div>
+                                <div class="preset-col-action">Action</div>
+                            </div>
+                            <div v-for="(preset, idx) in presets" :key="idx" class="preset-row">
+                                <div class="preset-col-name">{{ preset.name }}</div>
+                                <div class="preset-col-material">{{ preset.material }}</div>
+                                <div class="preset-col-temp">{{ preset.temp }}°C</div>
+                                <div class="preset-col-action">
+                                    <button class="btn btn-sm btn-outline-danger" @click="deletePreset(idx)">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="button-group" style="margin-top: 12px;">
+                            <button class="btn btn-sm btn-danger" @click="clearAllPresets">Clear All Presets</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                    <!-- Recent Jobs Card -->
-                    <div 
-                        ref="recentJobsCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'recentJobs',
-                            'resizing': dragState.active && dragState.cardId === 'recentJobs' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.recentJobs.x + 'px',
-                            top: cardPositions.recentJobs.y + 'px',
-                            width: cardSizes.recentJobs.width + 'px',
-                            height: cardSizes.recentJobs.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'recentJobs' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'recentJobs' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'recentJobs' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
-                    >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'recentJobs')">
-                            Recent Jobs
-                            <button v-if="isMobile" @click.stop="toggleCard('recentJobs')" class="card-toggle">{{ cardExpanded.recentJobs ? '▼' : '▶' }}</button>
-                        </div>
-                        <div class="card-content" v-if="!isMobile || cardExpanded.recentJobs">
-                            <div class="history-list">
-                                <table class="history-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>File</th>
-                                            <th>Status</th>
-                                            <th>Duration</th>
-                                            <th>Filament</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr v-for="job in history" :key="job.job_id" @click="selectJob(job)" :class="{ selected: selectedJob?.job_id === job.job_id }">
-                                            <td>{{ formatDate(job.start_time) }}</td>
-                                            <td class="filename">{{ job.filename }}</td>
-                                            <td><span class="status-badge" :class="job.status">{{ job.status }}</span></td>
-                                            <td>{{ formatDuration(job.total_duration) }}</td>
-                                            <td>{{ job.filament_used ? (job.filament_used / 1000).toFixed(2) + 'm' : '-' }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div v-if="selectedJob" class="job-details-compact">
-                                <div class="info-row"><span class="label">Start:</span> {{ formatDateTime(selectedJob.start_time) }}</div>
-                                <div class="info-row"><span class="label">End:</span> {{ formatDateTime(selectedJob.end_time) }}</div>
-                                <div class="info-row"><span class="label">Filament used:</span> {{ selectedJob.filament_used ? (selectedJob.filament_used / 1000).toFixed(2) + ' m' : '-' }}</div>
-                                <div v-if="jobMetadata" class="metadata-section">
-                                    <div class="info-row"><span class="label">Estimated:</span> {{ formatDuration(jobMetadata.estimated_time) }}</div>
-                                    <div class="info-row"><span class="label">Layer height:</span> {{ jobMetadata.layer_height }} mm</div>
-                                    <div class="info-row"><span class="label">Filament total:</span> {{ (jobMetadata.filament_total / 1000).toFixed(2) }} m</div>
-                                    <div class="info-row"><span class="label">Slicer:</span> {{ jobMetadata.slicer }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'recentJobs', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'recentJobs', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'recentJobs', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'recentJobs', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'recentJobs', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'recentJobs', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'recentJobs', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'recentJobs', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'recentJobs' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.recentJobs.width }} x {{ cardSizes.recentJobs.height }}
-                            </div>
-                            <div v-if="dragState.active && dragState.cardId === 'recentJobs' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
-                    </div>
+            <!-- Quick Actions -->
+            <div class="card quick-actions-card">
+                <h2>{{ t('cards.quickActions') }}</h2>
+                <div class="quick-actions">
+                    <button @click="saveInventoryAll" class="btn btn-danger">
+                        {{ t('quickActions.unload') }}
+                    </button>
+                    <button @click="stopAssist" class="btn btn-warning">
+                        {{ t('quickActions.stopAssist') }}
+                    </button>
+                    <button @click="refreshStatus" class="btn btn-secondary">
+                        {{ t('quickActions.refresh') }}
+                    </button>
+                    <button @click="importOrcaPresets" class="btn btn-info">
+                        Import Orca Presets
+                    </button>
+                    <button @click="saveToPrinter" class="btn btn-info">
+                        💾 Save to Printer
+                    </button>
+                    <button @click="loadFromPrinter" class="btn btn-info">
+                        📂 Load from Printer
+                    </button>
+                </div>
+            </div>
+        </div>
 
-                    <!-- Toolhead Card -->
-                    <div 
-                        ref="toolheadCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'toolhead',
-                            'resizing': dragState.active && dragState.cardId === 'toolhead' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.toolhead.x + 'px',
-                            top: cardPositions.toolhead.y + 'px',
-                            width: cardSizes.toolhead.width + 'px',
-                            height: cardSizes.toolhead.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'toolhead' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'toolhead' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'toolhead' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
-                    >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'toolhead')">
-                            Toolhead
-                            <button v-if="isMobile" @click.stop="toggleCard('toolhead')" class="card-toggle">{{ cardExpanded.toolhead ? '▼' : '▶' }}</button>
-                        </div>
-                        <div class="card-content" v-if="!isMobile || cardExpanded.toolhead">
-                            <div class="info-row"><span class="label">Position:</span><span class="value">X:{{ toolhead.position?.[0]?.toFixed(1) || '?' }} Y:{{ toolhead.position?.[1]?.toFixed(1) || '?' }} Z:{{ toolhead.position?.[2]?.toFixed(1) || '?' }}</span></div>
-                            <div class="info-row"><span class="label">Homed axes:</span><span class="value">{{ toolhead.homed_axes || 'none' }}</span></div>
-                            <div class="info-row"><span class="label">Speed factor:</span><span class="value">{{ (gcodeMove.speed_factor * 100).toFixed(0) }}%</span></div>
-                            <div class="info-row"><span class="label">Extrude factor:</span><span class="value">{{ (gcodeMove.extrude_factor * 100).toFixed(0) }}%</span></div>
-                        </div>
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'toolhead', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'toolhead', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'toolhead', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'toolhead', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'toolhead', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'toolhead', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'toolhead', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'toolhead', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'toolhead' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.toolhead.width }} x {{ cardSizes.toolhead.height }}
-                            </div>
-                            <div v-if="dragState.active && dragState.cardId === 'toolhead' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
-                    </div>
+        <!-- Colour Picker Modal -->
+        <div v-if="showColorPickerModal" class="modal-overlay color-picker-modal" @click="closeColorPickerModal">
+            <div class="modal" @click.stop>
+                <h3>Edit Slot {{ colorPickerTarget?.slot?.index }}</h3>
 
-                    <!-- Quick Actions Card -->
-                    <div 
-                        ref="quickActionsCard"
-                        class="dashboard-card"
-                        :class="{ 
-                            'edit-mode': layoutEditMode,
-                            'dragging': dragState.active && dragState.cardId === 'quickActions',
-                            'resizing': dragState.active && dragState.cardId === 'quickActions' && dragState.resizeDirection
-                        }"
-                        :style="!isMobile ? {
-                            left: cardPositions.quickActions.x + 'px',
-                            top: cardPositions.quickActions.y + 'px',
-                            width: cardSizes.quickActions.width + 'px',
-                            height: cardSizes.quickActions.height + 'px',
-                            opacity: dragState.active && dragState.cardId === 'quickActions' ? '0.8' : '1',
-                            transform: dragState.active && dragState.cardId === 'quickActions' ? 'scale(1.02)' : 'scale(1)',
-                            boxShadow: dragState.active && dragState.cardId === 'quickActions' ? '0 10px 20px rgba(0,0,0,0.4)' : ''
-                        } : {}"
-                    >
-                        <div class="card-header" @mousedown="!isMobile && layoutEditMode && startDrag($event, 'quickActions')">
-                            Quick Actions
-                            <button v-if="isMobile" @click.stop="toggleCard('quickActions')" class="card-toggle">{{ cardExpanded.quickActions ? '▼' : '▶' }}</button>
-                        </div>
-                        <div class="card-content quick-actions" v-if="!isMobile || cardExpanded.quickActions">
-                            <button @click="saveInventoryAll" class="btn btn-danger">Save Inventory</button>
-                            <button @click="stopAssist" class="btn btn-warning">Stop All Assist</button>
-                            <button @click="refreshStatus" class="btn btn-secondary">Refresh</button>
-                            <div class="endless-spool-controls">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" v-model="endlessSpoolEnabled" @change="toggleEndlessSpool">
-                                    <span class="slider"></span>
-                                </label>
-                                <span>Endless Spool</span>
-                                <select v-model="endlessSpoolMode" @change="setEndlessSpoolMode" :disabled="!endlessSpoolEnabled">
-                                    <option value="exact">Exact</option>
-                                    <option value="material">Material only</option>
-                                    <option value="next">Next ready</option>
-                                </select>
+                <div class="form-group">
+                    <label>Material</label>
+                    <select v-model="modalMaterial" class="material-select" @change="onModalMaterialChange">
+                        <optgroup label="Built‑in Materials">
+                            <option v-for="(temp, mat) in materialOptions" :key="mat" :value="mat">{{ mat }}</option>
+                        </optgroup>
+                        <optgroup v-if="presets.length" label="Orca Presets">
+                            <option v-for="p in presets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Temperature (°C)</label>
+                    <input type="number" v-model.number="modalTemp" min="1" max="300" class="temp-input-wide">
+                </div>
+
+                <div class="form-group">
+                    <label>Color</label>
+                    <div class="color-picker-grid">
+                        <div class="color-swatch-row">
+                            <div v-for="preset in colorPresets.slice(0,5)" :key="preset.hex" class="color-swatch-item">
+                                <div class="color-swatch-circle" :style="{ backgroundColor: preset.hex }" @click="handleColorSwatchClick(preset.hex)"></div>
+                                <div class="color-swatch-label">{{ preset.name }}</div>
                             </div>
-                            <!-- Printer sync buttons -->
-                            <button @click="saveToPrinter" class="btn btn-info">💾 Save to printer</button>
-                            <button @click="loadFromPrinter" class="btn btn-info">📂 Load from printer</button>
-                            <!-- Existing export/import -->
-                            <button @click="exportSettings" class="btn btn-info">Export Settings</button>
-                            <button @click="triggerImport" class="btn btn-info">Import Settings</button>
                         </div>
-                        <template v-if="!isMobile">
-                            <div v-if="layoutEditMode" class="resize-handle top-left" @mousedown="startResize($event, 'quickActions', 'nw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top-right" @mousedown="startResize($event, 'quickActions', 'ne')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-left" @mousedown="startResize($event, 'quickActions', 'sw')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom-right" @mousedown="startResize($event, 'quickActions', 'se')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle top" @mousedown="startResize($event, 'quickActions', 'n')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle right" @mousedown="startResize($event, 'quickActions', 'e')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle bottom" @mousedown="startResize($event, 'quickActions', 's')"></div>
-                            <div v-if="layoutEditMode" class="resize-handle left" @mousedown="startResize($event, 'quickActions', 'w')"></div>
-                            <div v-if="dragState.active && dragState.cardId === 'quickActions' && dragState.resizeDirection" class="size-indicator">
-                                {{ cardSizes.quickActions.width }} x {{ cardSizes.quickActions.height }}
+                        <div class="color-swatch-row">
+                            <div v-for="preset in colorPresets.slice(5)" :key="preset.hex" class="color-swatch-item">
+                                <div class="color-swatch-circle" :style="{ backgroundColor: preset.hex }" @click="handleColorSwatchClick(preset.hex)"></div>
+                                <div class="color-swatch-label">{{ preset.name }}</div>
                             </div>
-                            <div v-if="dragState.active && dragState.cardId === 'quickActions' && !dragState.resizeDirection" class="card-ghost"></div>
-                        </template>
+                        </div>
                     </div>
+                    <div class="color-preview-area">
+                        <div class="color-preview-box" :style="{ backgroundColor: modalColorHex }"></div>
+                        <div class="color-input-group">
+                            <input type="color" :value="modalColorHex" @input="handleColorPickerInput">
+                            <input type="text" v-model="modalColorHex" placeholder="#RRGGBB" class="hex-input">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button @click="saveSlotFromModal" class="btn btn-primary">Save</button>
+                    <button @click="closeColorPickerModal" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
         </div>
@@ -759,12 +397,6 @@
         <div v-if="showFeedModal" class="modal-overlay" @click="closeFeedDialog">
             <div class="modal" @click.stop>
                 <h3>{{ t('dialogs.feedTitle', { slot: feedSlot }) }}</h3>
-                <div class="preset-buttons">
-                    <button v-for="len in presetLengths" :key="len" @click="feedLength = len" class="btn btn-sm btn-outline">{{ len }}mm</button>
-                </div>
-                <div class="preset-buttons">
-                    <button v-for="sp in presetSpeeds" :key="sp" @click="feedSpeed = sp" class="btn btn-sm btn-outline">{{ sp }}mm/s</button>
-                </div>
                 <div class="form-group">
                     <label>{{ t('dialogs.length') }}</label>
                     <input type="number" v-model.number="feedLength" min="1" max="2000">
@@ -784,12 +416,6 @@
         <div v-if="showRetractModal" class="modal-overlay" @click="closeRetractDialog">
             <div class="modal" @click.stop>
                 <h3>{{ t('dialogs.retractTitle', { slot: retractSlot }) }}</h3>
-                <div class="preset-buttons">
-                    <button v-for="len in presetLengths" :key="len" @click="retractLength = len" class="btn btn-sm btn-outline">{{ len }}mm</button>
-                </div>
-                <div class="preset-buttons">
-                    <button v-for="sp in presetSpeeds" :key="sp" @click="retractSpeed = sp" class="btn btn-sm btn-outline">{{ sp }}mm/s</button>
-                </div>
                 <div class="form-group">
                     <label>{{ t('dialogs.length') }}</label>
                     <input type="number" v-model.number="retractLength" min="1" max="2000">
@@ -811,6 +437,6 @@
         </div>
     </div>
 
-    <script src="ace-dashboard.js?v=20260401"></script>
+    <script src="ace-dashboard.js?v=20260330"></script>
 </body>
 </html>
