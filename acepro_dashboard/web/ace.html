@@ -160,8 +160,7 @@
                                 }"
                             >
                                 <div class="slot-header">
-                                    <h3 class="tool-title" v-if="slot.tool !== null && slot.tool !== undefined">T{{ slot.tool }} <span class="slot-sub" v-if="slot.index !== undefined">({{ t('slots.slot') }} {{ slot.index }})</span></h3>
-                                    <h3 v-else>{{ t('slots.slot') }} {{ slot.index }}</h3>
+                                    <h3>{{ t('slots.slot') }} {{ slot.index }}</h3>
                                     <span v-if="isCurrentToolSlot(slot, inst.index)" class="current-tool-badge">LOADED</span>
                                     <span v-if="isRfidIdentified(slot.rfid)" class="rfid-badge">{{ t('slots.rfid') }}</span>
                                     <span class="slot-status-badge" :class="slot.status">
@@ -179,15 +178,20 @@
                                 </div>
                                 
                                 <div class="slot-info">
+                                    <!-- Preset Name dropdown -->
+                                    <div class="info-item">
+                                        <span class="label">{{ t('slots.preset') }}:</span>
+                                        <select class="material-select" :value="slot.custom_name || ''" @change="applyPresetToSlot(slot, inst.index, $event.target.value)" :disabled="isSlotLocked(inst, slot)">
+                                            <option value="">-- None --</option>
+                                            <option v-for="p in presets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                                        </select>
+                                    </div>
+                                    <!-- Material dropdown (renamed) -->
                                     <div class="info-item">
                                         <span class="label">{{ t('slots.type') }}:</span>
-                                        <!-- Material dropdown that includes built-in materials + Orca presets -->
-                                        <select class="material-select" :value="slot.material || slot.type || ''" @change="setSlotMaterial(slot.index, inst.index, slot.tool, $event.target.value, slot.color, slot.temp)" :disabled="isSlotLocked(inst, slot)">
+                                        <select class="material-select" :value="slot.material || slot.type || ''" @change="setSlotMaterial(slot.index, inst.index, slot.tool, $event.target.value, slot.color, slot.temp, slot.custom_name)" :disabled="isSlotLocked(inst, slot)">
                                             <optgroup label="Built‑in Materials">
                                                 <option v-for="(temp, mat) in materialOptions" :key="mat" :value="mat">{{ mat }}</option>
-                                            </optgroup>
-                                            <optgroup v-if="presets.length" label="Orca Presets">
-                                                <option v-for="p in presets" :key="p.name" :value="p.name">{{ p.name }}</option>
                                             </optgroup>
                                         </select>
                                     </div>
@@ -199,10 +203,14 @@
                                             min="1" 
                                             max="300" 
                                             :value="slot.temp || 0" 
-                                            @blur="commitSlotTemp(slot.index, inst.index, slot.tool, $event, slot.color, slot.material || slot.type || '')"
-                                            @keydown.enter.prevent="commitSlotTemp(slot.index, inst.index, slot.tool, $event, slot.color, slot.material || slot.type || '')"
+                                            @blur="commitSlotTemp(slot.index, inst.index, slot.tool, $event, slot.color, slot.material || slot.type || '', slot.custom_name)"
+                                            @keydown.enter.prevent="commitSlotTemp(slot.index, inst.index, slot.tool, $event, slot.color, slot.material || slot.type || '', slot.custom_name)"
                                             :disabled="isSlotLocked(inst, slot)"
                                         >
+                                    </div>
+                                    <div class="info-item" v-if="slot.custom_name && slot.custom_name !== slot.material && slot.custom_name !== slot.type">
+                                        <span class="label">Preset:</span>
+                                        <span class="value">{{ slot.custom_name }}</span>
                                     </div>
                                     <div class="info-item">
                                         <span class="label">{{ t('slots.sku') }}:</span>
@@ -279,7 +287,7 @@
                 </div>
             </div>
 
-            <!-- Preset Library Card (Collapsible Table) -->
+            <!-- Preset Library Card -->
             <div class="card preset-library-card">
                 <h2 style="cursor: pointer;" @click="showPresetLibrary = !showPresetLibrary">
                     Preset Library
@@ -339,20 +347,23 @@
             </div>
         </div>
 
-        <!-- Colour Picker Modal -->
+        <!-- Colour Picker Modal with Preset Name -->
         <div v-if="showColorPickerModal" class="modal-overlay color-picker-modal" @click="closeColorPickerModal">
             <div class="modal" @click.stop>
                 <h3>Edit Slot {{ colorPickerTarget?.slot?.index }}</h3>
 
                 <div class="form-group">
+                    <label>Preset Name (Orca)</label>
+                    <select v-model="modalPresetName" class="material-select" @change="onModalPresetChange">
+                        <option value="">-- None / Manual --</option>
+                        <option v-for="p in presets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label>Material</label>
                     <select v-model="modalMaterial" class="material-select" @change="onModalMaterialChange">
-                        <optgroup label="Built‑in Materials">
-                            <option v-for="(temp, mat) in materialOptions" :key="mat" :value="mat">{{ mat }}</option>
-                        </optgroup>
-                        <optgroup v-if="presets.length" label="Orca Presets">
-                            <option v-for="p in presets" :key="p.name" :value="p.name">{{ p.name }}</option>
-                        </optgroup>
+                        <option v-for="(temp, mat) in materialOptions" :key="mat" :value="mat">{{ mat }}</option>
                     </select>
                 </div>
 
