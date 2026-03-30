@@ -30,3 +30,12 @@ Answer the interactive prompts to choose which components to install and where.
 
 Open `http://<host>/ace.html` after linking. Adjust `ace-dashboard-config.js` if you need a fixed API host.
 
+To uninstall:
+
+cd ~/acepro-mmu-dashboard
+
+chmod +x uninstall.sh
+
+./uninstall.sh
+
+Follow the interactive prompts to choose which components to remove
