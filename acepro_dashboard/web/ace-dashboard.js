@@ -108,7 +108,7 @@ createApp({
                         refreshStatus: 'Status refreshed',
                         dryingComplete: 'Drying cycle completed!',
                         validation: {
-                            tempRange: 'Temperature must be between 20 and 55°C',
+                            tempRange: 'Temperature must be between 20 and 65°C',
                             durationMin: 'Duration must be at least 1 minute',
                             feedLength: 'Length must be at least 1 mm',
                             retractLength: 'Length must be at least 1 mm'
@@ -184,7 +184,7 @@ createApp({
             },
             dryingTemp: ACE_DASHBOARD_CONFIG?.defaults?.dryingTemp || 50,
             dryingDuration: ACE_DASHBOARD_CONFIG?.defaults?.dryingDuration || 240,
-            dryingHours: 0,
+            dryingHours: 4,
             dryingMinutes: 0,
             localRemainingMinutes: null,
             dryerTimerInterval: null,
@@ -209,18 +209,82 @@ createApp({
                 { name: 'Gray', hex: '#808080' },
                 { name: 'Black', hex: '#000000' }
             ],
-            // ===== Extensive material list with default temperatures =====
             materialOptions: UNIQUE_MATERIALS.reduce((obj, mat) => {
-                let temp = 200;
-                if (mat === 'PLA') temp = 200;
-                else if (mat === 'PETG') temp = 235;
-                else if (mat === 'ABS') temp = 240;
-                else if (mat === 'ASA') temp = 245;
-                else if (mat === 'TPU') temp = 210;
-                else if (mat === 'PC') temp = 260;
-                else if (mat === 'PA') temp = 260;
-                else if (mat === 'PEEK') temp = 380;
-                else if (mat === 'PPSU') temp = 360;
+				let temp = 200;
+				if (mat === 'PLA') temp = 200;
+				else if (mat === 'PLA-CF') temp = 205;
+				else if (mat === 'PLA-AERO') temp = 200;
+				else if (mat === 'PETG') temp = 235;
+				else if (mat === 'PETG-CF') temp = 240;
+				else if (mat === 'PETG-GF') temp = 240;
+				else if (mat === 'ABS') temp = 240;
+				else if (mat === 'ABS-CF') temp = 245;
+				else if (mat === 'ABS-GF') temp = 245;
+				else if (mat === 'ASA') temp = 245;
+				else if (mat === 'ASA-CF') temp = 250;
+				else if (mat === 'ASA-GF') temp = 250;
+				else if (mat === 'ASA-AERO') temp = 245;
+				else if (mat === 'TPU') temp = 210;
+				else if (mat === 'PC') temp = 260;
+				else if (mat === 'PC-CF') temp = 265;
+				else if (mat === 'PC-ABS') temp = 250;
+				else if (mat === 'PC-PBT') temp = 255;
+				else if (mat === 'PA') temp = 260;
+				else if (mat === 'PA-CF') temp = 265;
+				else if (mat === 'PA6') temp = 260;
+				else if (mat === 'PA6-CF') temp = 265;
+				else if (mat === 'PA6-GF') temp = 265;
+				else if (mat === 'PA11') temp = 250;
+				else if (mat === 'PA11-CF') temp = 255;
+				else if (mat === 'PA11-GF') temp = 255;
+				else if (mat === 'PA12') temp = 250;
+				else if (mat === 'PA12-CF') temp = 255;
+				else if (mat === 'PA12-GF') temp = 255;
+				else if (mat === 'PAHT') temp = 270;
+				else if (mat === 'PAHT-CF') temp = 275;
+				else if (mat === 'PAHT-GF') temp = 275;
+				else if (mat === 'PEEK') temp = 380;
+				else if (mat === 'PEEK-CF') temp = 390;
+				else if (mat === 'PEEK-GF') temp = 390;
+				else if (mat === 'PEKK') temp = 370;
+				else if (mat === 'PEKK-CF') temp = 380;
+				else if (mat === 'PEI-1010') temp = 370;
+				else if (mat === 'PEI-1010-CF') temp = 375;
+				else if (mat === 'PEI-1010-GF') temp = 375;
+				else if (mat === 'PEI-9085') temp = 360;
+				else if (mat === 'PEI-9085-CF') temp = 365;
+				else if (mat === 'PEI-9085-GF') temp = 365;
+				else if (mat === 'PPS') temp = 320;
+				else if (mat === 'PPS-CF') temp = 325;
+				else if (mat === 'PPSU') temp = 360;
+				else if (mat === 'PSU') temp = 350;
+				else if (mat === 'PES') temp = 340;
+				else if (mat === 'POM') temp = 220;
+				else if (mat === 'PP') temp = 230;
+				else if (mat === 'PP-CF') temp = 235;
+				else if (mat === 'PP-GF') temp = 235;
+				else if (mat === 'PPA-CF') temp = 280;
+				else if (mat === 'PPA-GF') temp = 280;
+				else if (mat === 'HIPS') temp = 230;
+				else if (mat === 'PVA') temp = 210;
+				else if (mat === 'PVB') temp = 190;
+				else if (mat === 'BVOH') temp = 200;
+				else if (mat === 'PCL') temp = 90;
+				else if (mat === 'PCTG') temp = 240;
+				else if (mat === 'PET') temp = 240;
+				else if (mat === 'PET-CF') temp = 245;
+				else if (mat === 'PET-GF') temp = 245;
+				else if (mat === 'PE') temp = 200;
+				else if (mat === 'PE-CF') temp = 205;
+				else if (mat === 'PE-GF') temp = 205;
+				else if (mat === 'CoPE') temp = 200;
+				else if (mat === 'EVA') temp = 190;
+				else if (mat === 'FLEX') temp = 210;
+				else if (mat === 'SBS') temp = 210;
+				else if (mat === 'TPI') temp = 280;
+				else if (mat === 'PVDF') temp = 240;
+				else if (mat === 'PHA') temp = 200;
+				else if (mat === 'PI') temp = 360;
                 else temp = 0;
                 obj[mat] = temp;
                 return obj;
@@ -437,6 +501,8 @@ createApp({
                 this.wsConnected = true;
                 this.showNotification(this.t('notifications.websocketConnected'), 'success');
                 this.subscribeToStatus();
+                // Immediately fetch status to get latest slot data after connection
+                this.loadAllStatus();
             };
             this.ws.onmessage = (event) => {
                 try {
@@ -749,15 +815,58 @@ createApp({
             }
         },
 
+        // ========== ENHANCED SAVE INVENTORY ==========
         async saveInventoryAll() {
-            let anySuccess = false;
             const instances = this.instanceOptions.length > 0 ? this.instanceOptions : [{ index: this.selectedInstance || 0 }];
+            let anySlotUpdated = false;
+            let allSuccessful = true;
+
+            for (const inst of instances) {
+                const panel = this.instancesPanels.find(p => p.index === inst.index);
+                if (!panel || !Array.isArray(panel.slots)) continue;
+
+                for (const slot of panel.slots) {
+                    if (slot.status === 'empty') continue;
+                    if (!slot.material || slot.material.trim() === '') continue;
+
+                    const toolNumber = this.getSlotToolNumber(slot, inst.index);
+                    const hex = this.getColorHex(slot.color);
+                    const presetName = slot.custom_name || '';
+
+                    const success = await this.setSlotColor(
+                        slot.index,
+                        inst.index,
+                        hex,
+                        toolNumber,
+                        slot.material,
+                        slot.temp,
+                        presetName
+                    );
+                    
+                    if (success) {
+                        anySlotUpdated = true;
+                    } else {
+                        allSuccessful = false;
+                    }
+                    
+                    // Small delay to avoid flooding the command queue
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                }
+            }
+
+            let saveSuccess = true;
             for (const inst of instances) {
                 const success = await this.executeCommand('ACE_SAVE_INVENTORY', { INSTANCE: inst.index });
-                if (success) anySuccess = true;
+                if (!success) saveSuccess = false;
             }
-            if (anySuccess) {
+
+            if (anySlotUpdated && saveSuccess) {
                 this.showNotification(this.t('notifications.commandSuccess', { command: 'ACE_SAVE_INVENTORY' }), 'success');
+                setTimeout(() => this.loadAllStatus(), 500);
+            } else if (anySlotUpdated && !saveSuccess) {
+                this.showNotification('Slots updated but inventory save failed', 'error');
+            } else if (!anySlotUpdated) {
+                this.showNotification('No slots were updated (all empty or no material)', 'info');
             } else {
                 this.showNotification(this.t('notifications.commandErrorGeneric'), 'error');
             }
@@ -1310,7 +1419,15 @@ createApp({
             }
         },
 
+        // ========== ENHANCED LOAD FROM PRINTER WITH WEBSOCKET BLOCKING ==========
         async loadFromPrinter() {
+            // Save the original WebSocket handler and temporarily disable it
+            let originalHandler = null;
+            if (this.ws) {
+                originalHandler = this.ws.onmessage;
+                this.ws.onmessage = () => {}; // Block incoming status updates
+            }
+
             try {
                 const response = await fetch(`${this.apiBase}/server/files/config/ace_dashboard_settings.json`);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1341,10 +1458,20 @@ createApp({
                     const selectedPanel = updatedPanels.find(p => p.index === this.selectedInstance);
                     if (selectedPanel) this.slots = selectedPanel.slots;
                     this.showNotification('Settings loaded from printer', 'success');
+
+                    // Save the loaded data to the ACE inventory (still with WebSocket blocked)
+                    await this.saveInventoryAll();
+                    this.showNotification('Settings saved to ACE inventory', 'success');
                 }
             } catch (error) {
                 console.error('Load from printer error:', error);
                 if (!error.message.includes('404')) this.showNotification('Failed to load settings', 'error');
+            } finally {
+                // Restore the original WebSocket handler and refresh status
+                if (this.ws && originalHandler) {
+                    this.ws.onmessage = originalHandler;
+                }
+                await this.loadAllStatus();
             }
         },
 
@@ -1390,13 +1517,47 @@ createApp({
             return localStorage.getItem(this._getStorageKey(instanceIndex, slotIndex)) || '';
         },
 
-        // New method: apply preset to slot
+        // Apply preset to slot (with fix for "None" selection)
         async applyPresetToSlot(slot, instanceIndex, presetName) {
             if (!presetName) {
-                // If clearing, also remove from localStorage
+                // Clear the preset name locally
+                slot.custom_name = '';
                 this._savePresetToLocalStorage(instanceIndex, slot.index, '');
+
+                // Send command to printer without FILAMENT_SETTINGS_ID
+                const hex = this.getColorHex(slot.color);
+                const success = await this.setSlotColor(
+                    slot.index,
+                    instanceIndex,
+                    hex,
+                    slot.tool,
+                    slot.material,
+                    slot.temp,
+                    ''  // empty presetName -> no FILAMENT_SETTINGS_ID in command
+                );
+                if (success) {
+                    this.showNotification(`Preset cleared for slot ${slot.index}`, 'success');
+                    // Update local copies
+                    this.updateLocalSlotTemp(instanceIndex, slot.index, slot.temp);
+                    const panel = this.instancesPanels.find(p => p.index === instanceIndex);
+                    if (panel) {
+                        const localSlot = panel.slots.find(s => s.index === slot.index);
+                        if (localSlot) localSlot.custom_name = '';
+                    }
+                    if (this.selectedInstance === instanceIndex) {
+                        const currentSlot = this.slots.find(s => s.index === slot.index);
+                        if (currentSlot) currentSlot.custom_name = '';
+                    }
+                } else {
+                    // Revert UI change on failure (keep old preset name)
+                    const oldPreset = this._loadPresetFromLocalStorage(instanceIndex, slot.index);
+                    slot.custom_name = oldPreset;
+                    this.showNotification('Failed to clear preset', 'error');
+                }
                 return;
             }
+
+            // Existing logic for non‑empty presetName
             const preset = this.presets.find(p => p.name === presetName);
             if (!preset) {
                 this.showNotification(`Preset "${presetName}" not found`, 'error');
@@ -1443,7 +1604,7 @@ createApp({
                 }
             } else {
                 // Revert on failure
-                slot.material = slot.material; // keep old? better to revert but not needed
+                slot.material = slot.material; // keep old
                 slot.temp = slot.temp;
                 slot.custom_name = slot.custom_name;
                 // Remove from localStorage if command failed
