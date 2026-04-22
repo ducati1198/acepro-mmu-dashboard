@@ -20,7 +20,7 @@ cd ~
 
 git clone -b main https://github.com/ducati1198/acepro-mmu-dashboard
 
-cd ~/acepro-mmu-dashboard
+cd ~/acepro-mmu-dashboard/acepro_dashboard
 
 chmod +x install.sh
 
