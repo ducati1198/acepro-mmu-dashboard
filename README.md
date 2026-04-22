@@ -39,3 +39,12 @@ chmod +x uninstall.sh
 ./uninstall.sh
 
 Follow the interactive prompts to choose which components to remove
+
+
+AFTER A UPDATE OR FRESH INSTALL NEED TO FORCE A HARD REFRESH OR CLEAR YOUR CACHE IN YOUR BROWSER:
+
+You can force a hard refresh on your browser each time you update:
+
+Windows/Linux: Ctrl + F5 or Ctrl + Shift + R
+
+Mac: Cmd + Shift + R
